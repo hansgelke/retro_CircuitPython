@@ -1,0 +1,223 @@
+import time
+import asyncio
+import board
+import digitalio
+import keypad
+import pwmio
+
+led = digitalio.DigitalInOut(board.LED)
+led.direction = digitalio.Direction.OUTPUT
+
+led.value = False
+hangup_time = True
+
+ringing0 = digitalio.DigitalInOut(board.GP2)
+ringing0.direction = digitalio.Direction.OUTPUT
+ringing0.value = False
+ringing1 = digitalio.DigitalInOut(board.GP3)
+ringing1.direction = digitalio.Direction.OUTPUT
+ringing1.value = False
+
+
+class NoDialTimer:
+    def __init__(self, nodial_time, nodial_set):
+        self.time = nodial_time
+        self.set = nodial_set
+
+class MainFsm:
+    def __init__(self, main_state, main_count, main_ones, main_tens):
+        self.state = main_state
+        self.count = main_count
+        self.tens = main_tens
+        self.ones = main_ones
+
+class RingGenerator:
+    def __init__(self, ring_ringing):
+        self.ringring = ring_ringing
+
+
+async def fsm():
+    with keypad.Keys((board.GP4,board.GP5), value_when_pressed=True, pull=False) as keys:
+        MainFsm.state = 0
+        MainFsm.count = 0
+        MainFsm.tens = 0
+        MainFsm.ones = 0
+        while True:
+            key_event = keys.events.get()
+#----------------------------------------------------------
+#State 0: Idle state, wait until soeone lifts receiver
+#----------------------------------------------------------
+
+            if MainFsm.state == 0:
+                if key_event and key_event.pressed:
+                    if key_event.key_number == 0:
+                        MainFsm.state = 1
+                await asyncio.sleep(0)
+
+#----------------------------------------------------------
+#State 1: Loop is closed,  waiting for dialing pulse_low
+#   Error timeout in case somone is not dialing (implement later)
+#----------------------------------------------------------
+            elif MainFsm.state == 1:
+                #print("State:", MainFsm.state)
+
+                if key_event and key_event.released:
+                    if key_event.key_number == 0:
+                        MainFsm.state = 2
+                        MainFsm.count = 0
+                        NoDialTimer.time = 20
+                await asyncio.sleep(0)
+#----------------------------------------------------------
+#State 2:  Wait until loop closed. Timeout > 70 ms
+#          On timeout go to idle MainFsm.state 0
+#           Loop Closed before timeout brings it to state 3
+#           Dial pulse is incremented
+#----------------------------------------------------------
+
+            elif MainFsm.state == 2:
+                if key_event and key_event.pressed:
+                    if key_event.key_number == 0:
+                        MainFsm.state = 3
+                        NoDialTimer.time = 20
+                        MainFsm.count = MainFsm.count + 1
+                elif NoDialTimer.time == 0:
+                    MainFsm.state = 0
+                await asyncio.sleep(0)
+
+#----------------------------------------------------------
+#State 3: After a dialing Pulse(low) FSM waits until pulse
+#         goes low again for evtl. next pulse
+#         If Timeout the dial is completed
+#----------------------------------------------------------
+            elif MainFsm.state == 3:
+                if key_event and key_event.released:
+                    if key_event.key_number == 0:
+                        MainFsm.state = 2
+                elif NoDialTimer.time == 0:
+                    MainFsm.tens = MainFsm.count
+                    print("Tens:", MainFsm.tens)
+                    MainFsm.state = 4
+                await asyncio.sleep(0)
+#----------------------------------------------------------
+#State 4: After the dial is complete, it ends up in state 4
+#           where it waits for the second number
+#----------------------------------------------------------
+            elif MainFsm.state == 4:
+                if key_event and key_event.released:
+                    if key_event.key_number == 0:
+                        MainFsm.state = 5
+                        MainFsm.count = 0
+                        NoDialTimer.time = 20
+                await asyncio.sleep(0)
+#----------------------------------------------------------
+#State 5:  Wait until loop closed. Timeout > 70 ms
+#          On timeout go to idle MainFsm.state 0
+#           Loop Closed before timeout brings it to state 3
+#           Dial pulse is incremented
+#----------------------------------------------------------
+
+            elif MainFsm.state == 5:
+                if key_event and key_event.pressed:
+                    if key_event.key_number == 0:
+                        MainFsm.state = 6
+                        NoDialTimer.time = 20
+                        MainFsm.count = MainFsm.count + 1
+                elif NoDialTimer.time == 0:
+                    MainFsm.state = 0
+                await asyncio.sleep(0)
+
+#----------------------------------------------------------
+#State 6: After a dialing Pulse(low) FSM waits until pulse
+#         goes low again for evtl. next pulse
+#         If Timeout the dial is completed
+#----------------------------------------------------------
+            elif MainFsm.state == 6:
+                if key_event and key_event.released:
+                    if key_event.key_number == 0:
+                        MainFsm.state = 5
+                elif NoDialTimer.time == 0:
+                    MainFsm.ones = MainFsm.count
+                    print("Ones:", MainFsm.ones)
+                    MainFsm.state = 7
+                await asyncio.sleep(0)
+#----------------------------------------------------------
+#State 7: The Dialed Number is ringing
+#         goes low again for evtl. next pulse
+#         If Timeout the dial is completed
+#----------------------------------------------------------
+            elif MainFsm.state == 7:
+                RingGenerator.ringring = 1
+                if key_event and key_event.pressed:
+                    if key_event.key_number == 1:
+                        MainFsm.state = 8
+                        RingGenerator.ringring = 0
+                elif key_event and key_event.released:
+                    if (key_event.key_number == 1) or (key_event.key_number == 0):
+                        MainFsm.state = 0
+                        RingGenerator.ringring = 0
+                await asyncio.sleep(0)
+
+            #----------------------------------------------------------
+#State 8: The other party answered the phone,
+#           the connection is established
+#----------------------------------------------------------
+            elif MainFsm.state == 8:
+                if key_event and key_event.released:
+                    if (key_event.key_number == 1) or (key_event.key_number == 0):
+                        MainFsm.state = 0
+
+
+
+async def nodial_timer():
+
+    NoDialTimer.time = 0
+    while True:
+        if NoDialTimer.time > 0:
+            NoDialTimer.time = NoDialTimer.time-1
+        else:
+            NoDialTimer.time = NoDialTimer.time
+        await asyncio.sleep_ms(10)
+
+async def print_state():
+    past_state = 0
+    while True:
+        if MainFsm.state != past_state:
+            print("State:", MainFsm.state)
+        past_state = MainFsm.state
+        await asyncio.sleep(0)
+
+
+
+pwm0 = pwmio.PWMOut(board.GP0, frequency=20, duty_cycle=65535)
+pwm1 = pwmio.PWMOut(board.GP1, frequency=20, duty_cycle=65535)
+
+
+async def ring_pwm():
+
+    RingGenerator.ringring = 0
+    #Force Ringing mode on for diagnostics
+    #RingGenerator.ringring = 1
+
+    ring_gb = [(0.4,1),(0.2,0),(0.4,1), (2,0)]
+    while True:
+        if RingGenerator.ringring == 1:
+            for (index,tone) in ring_gb:
+                if tone:
+                    #if MainFsm.ones == 4:
+                    pwm1.duty_cycle = 32767
+                    ringing1.value = True
+                    print("ring_on")
+                    #elif MainFsm.ones == 5:
+                     #   pwm1.duty_cycle = 32767
+                     #   ringing1.value = True
+                    await asyncio.sleep(index)
+                else:
+                    pwm0.duty_cycle = 65535
+                    pwm1.duty_cycle = 65535
+                    await asyncio.sleep(0.1)
+                    ringing0.value = False
+                    ringing1.value = False
+                    await asyncio.sleep(index)
+        else:
+                await asyncio.sleep(0)
+
