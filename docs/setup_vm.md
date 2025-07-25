@@ -25,6 +25,7 @@ Be nice to the students and make Ubuntu a little less unbearable:
 The guest additions are necessary for mounting shared folders, which is the fastest way to copy over data like the build cache.
 
 Download the ISO for your precise VirtualBox version [here][virtual-box-download].
+[here][uboot].
 Mount the ISO to the VM via Devices > Optical drives > Choose a disk drive.
 Once mounted, execute `autorun.sh` from within the VM.
 Restart the virtual machine for it to take effect.
@@ -91,3 +92,4 @@ One more thing: In order to get a small OVA file, unused blocks should be set uo
 That's it!
 
 [virtual-box-download]: https://download.virtualbox.org/virtualbox
+[uboot]: https://github.com/hansgelke/retro_CircuitPython/blob/main/docs/configuring_u-boot.md
