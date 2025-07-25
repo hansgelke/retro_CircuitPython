@@ -1,9 +1,11 @@
 # Setting up a VM
 
-These are instructions to prepare a VM for students to use in the labs.
+**These** are instructions to prepare a VM for students to use in the labs.
 First, go through the process of setting up a fresh Ubuntu VM.
 Skip the unattended installation, I don't trust VirtualBox.
 (user: mc2, password: mc2)
+
+1. - - hhhhh
 
 ## General settings
 
@@ -68,9 +70,9 @@ Remeber that the default location of the cache is `~/sstate-cache`.
 cd ~
 mkdir sstate-cache
 sudo su
-cp -R /media/sf_sstate-cache/* sstate-cache/
-chown -R mc2:mc2 /home/mc2/sstate-cache/
-```
+# cp -R /media/sf_sstate-cache/* sstate-cache/
+# chown -R mc2:mc2 /home/mc2/sstate-cache/
+# ```
 
 The `sstate-cache` does not include downloaded sources and compilation cache of the kernel.
 These are required for the kernel module lab.
